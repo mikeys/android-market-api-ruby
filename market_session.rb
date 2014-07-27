@@ -20,9 +20,9 @@ class MarketSession
   def set_context
     @context = RequestContext.new
     @context.isSecure = false
-    @context.version = 1002
+    @context.version = 8013013
     @context.androidId = "3d57913607bef57b"
-    @context.deviceAndSdkVersion = "sapphire:7"
+    @context.deviceAndSdkVersion = "crespo:15"
     set_locale
     set_operator_tmobile
   end
@@ -49,18 +49,11 @@ class MarketSession
     }
 
     response_body = RestClient.post(URL_LOGIN, params)
-    # auth_key = AUTH_PATTERN.match(response_body)[:auth_key]
-    lines = response_body.split("\n")
-    line = lines.find { |line| line[0..4] == "Auth="}
+    auth_key = AUTH_PATTERN.match(response_body)[:auth_key]
 
-    raise RuntimeError, "auth_key not found in #{response_body}" unless line
-
-    auth_key = line[5..-1]
-    # puts "With split: #{auth_key_split}"
-    # auth_key = AUTH_PATTERN.match(response_body)[:auth_key]
-    # puts "With regexp: #{auth_key}"
-
-    # puts "EQUAL? #{auth_key == auth_key_split}"
+    unless auth_key
+      raise RuntimeError, "auth_key not found in #{response_body}"
+    end
 
     self.auth_sub_token = auth_key
   rescue StandardError => ex
@@ -68,56 +61,39 @@ class MarketSession
     raise RuntimeError(ex)
   end
 
-  def flush
-    @request.context = @context
-    resp = execute_protobuf(@request)
+  def execute(request_group)
+    request = Request.new
+    request.context = @context
+    request.requestgroup << request_group
+
+    execute_protobuf(request)
   end
-
-  def append(requestGroup)
-    group = Request::RequestGroup.new
-
-    case requestGroup
-    when AppsRequest
-      group.appsRequest = requestGroup
-    when GetImageRequest
-      group.imageRequest = requestGroup
-    when CommentsRequest
-      group.commentsRequest = requestGroup
-    when CategoriesRequest
-      group.categoriesRequest = requestGroup
-    else
-      raise ArgumentError, "Invalid group type"
-    end
-
-    @request.context = @context
-    @request.requestgroup << group
-  end
-
-# apps = AppsRequest.new
-# apps.query = "birds"
-# apps.startIndex = 0
-# apps.entriesCount = 10
-# apps.withExtendedInfo = true
 
   def execute_protobuf(request)
     response = execute_raw_http_query(request)
-    puts response.inspect
     Response.parse(response)
   end
 
   def execute_raw_http_query(request)
     headers = {
       "Cookie" => "ANDROID=#{auth_sub_token}",
-      "User-Agent" => "Android-Market/2 (sapphire PLAT-RC33); gzip",
+      "User-Agent" => "Android-Finsky/3.7.13 (api=3,versionCode=8013013,sdk=15,device=crespo,hardware=herring,product=soju); gzip",
       "Content-Type" => "application/x-www-form-urlencoded",
       "Accept-Charset" => "ISO-8859-1,utf-8;q=0.7,*;q=0.7",
-      "Accept" => "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2",
       "Accept-Encoding" => nil
     }
 
-    request64 = Base64.strict_encode64(request.to_s)
+    request64 = Base64.urlsafe_encode64(request.to_s)
     request_data = { version: PROTOCOL_VERSION, request: request64 }
     RestClient.post(URL_API, request_data, headers)
+  end
+
+  def android_id
+    @context.android_id
+  end
+
+  def android_id=(android_id)
+    @context.androidId = android_id
   end
 
   attr_reader :auth_sub_token
@@ -125,5 +101,28 @@ class MarketSession
   def auth_sub_token=(auth_sub_token)
     @context.authSubToken = auth_sub_token
     @auth_sub_token = auth_sub_token
+  end
+
+  module Helper
+    class << self
+      def build_request_group_for(request_element)
+        group = Request::RequestGroup.new
+
+        case request_element
+        when AppsRequest
+          group.appsRequest = request_element
+        when GetImageRequest
+          group.imageRequest = request_element
+        when CommentsRequest
+          group.commentsRequest = request_element
+        when CategoriesRequest
+          group.categoriesRequest = request_element
+        else
+          raise ArgumentError, "Invalid group type"
+        end
+
+        group
+      end
+    end
   end
 end
