@@ -1,6 +1,7 @@
 require './market_session'
 
-RestClient.proxy = "http://127.0.0.1:8888"
+# For debugging with Charles
+# RestClient.proxy = "http://127.0.0.1:8888"
 session = MarketSession.new
 session.login("Google User", "Google Password")
 apps_request = AppsRequest.new
